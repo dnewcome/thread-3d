@@ -1,0 +1,13 @@
+{
+  "name": "thread-3d",
+  "version": "1.0.0",
+  "description": "3D LED thread visualizer with Art-Net control",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^28.0.0",
+    "three": "^0.160.0"
+  }
+}
