@@ -77,12 +77,13 @@ function parseSTL(buf) {
 }
 
 // ─── LED position extraction ──────────────────────────────────────────────────
-// The STL triangles are ordered: all triangles for strand 0 first, then strand 1, etc.
+// The STL triangles are ordered: all triangles for strand 0, then strand 1, etc.
 // Within each strand, triangles for each LED chip are consecutive.
-// We detect strand boundaries (jump > STRAND_JUMP_THRESHOLD) and then
-// LED boundaries within a strand (jump > LED_JUMP_THRESHOLD).
-const STRAND_JUMP_THRESHOLD = 0.5; // mm gap between strands
-const LED_JUMP_THRESHOLD = 0.08;   // mm gap between individual LEDs within a strand
+//
+// Strand boundaries: a large positional jump between consecutive triangle centroids.
+// Within each strand: divide triangles evenly into LEDS_PER_STRAND groups and
+// average their centroids. This is robust regardless of exact per-LED triangle count.
+const STRAND_JUMP_THRESHOLD = 0.5; // mm — gap between last tri of one strand and first of next
 
 function dist3(a, b) {
   const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
@@ -90,7 +91,7 @@ function dist3(a, b) {
 }
 
 function extractLEDPositions(centroids) {
-  // Split into strands
+  // Split into strands by detecting large positional jumps
   const strandRanges = [];
   let strandStart = 0;
   for (let i = 1; i < centroids.length; i++) {
@@ -103,31 +104,25 @@ function extractLEDPositions(centroids) {
 
   console.log(`Found ${strandRanges.length} strands`);
 
-  // For each strand, find individual LEDs by position jump
   const strandLEDs = [];
   for (let s = 0; s < strandRanges.length; s++) {
     const [start, end] = strandRanges[s];
-    const strand = centroids.slice(start, end);
+    const triCount = end - start;
 
+    // Divide triangles evenly into LEDS_PER_STRAND groups
     const ledPositions = [];
-    let ledTriStart = 0;
-
-    for (let i = 1; i <= strand.length; i++) {
-      const isEnd = i === strand.length;
-      const jumped = !isEnd && dist3(strand[i], strand[i - 1]) > LED_JUMP_THRESHOLD;
-      if (jumped || isEnd) {
-        // Average centroid of the LED's triangles
-        let sx = 0, sy = 0, sz = 0;
-        const count = i - ledTriStart;
-        for (let t = ledTriStart; t < i; t++) {
-          sx += strand[t].x; sy += strand[t].y; sz += strand[t].z;
-        }
-        ledPositions.push(new THREE.Vector3(sx / count, sy / count, sz / count));
-        ledTriStart = i;
+    for (let led = 0; led < LEDS_PER_STRAND; led++) {
+      const triStart = start + Math.round(led * triCount / LEDS_PER_STRAND);
+      const triEnd   = start + Math.round((led + 1) * triCount / LEDS_PER_STRAND);
+      let sx = 0, sy = 0, sz = 0;
+      const count = triEnd - triStart;
+      for (let t = triStart; t < triEnd; t++) {
+        sx += centroids[t].x; sy += centroids[t].y; sz += centroids[t].z;
       }
+      ledPositions.push(new THREE.Vector3(sx / count, sy / count, sz / count));
     }
 
-    console.log(`  Strand ${s}: ${ledPositions.length} LEDs`);
+    console.log(`  Strand ${s}: ${ledPositions.length} LEDs from ${triCount} triangles`);
     strandLEDs.push(ledPositions);
   }
 
