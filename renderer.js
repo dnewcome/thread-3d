@@ -8,6 +8,7 @@ const CANVAS = document.getElementById('canvas');
 const NUM_STRANDS = 12;
 const LEDS_PER_STRAND = 600;
 const TOTAL_LEDS = NUM_STRANDS * LEDS_PER_STRAND;
+const LED_OFF_COLOR = new THREE.Color(0.04, 0.04, 0.04); // just above background (0x0a0a0a)
 
 // ─── Three.js setup ───────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas: CANVAS, antialias: true });
@@ -133,10 +134,11 @@ function extractLEDPositions(centroids) {
 let ledMesh = null;
 
 function buildLEDMesh(strandLEDs) {
-  // Estimate LED size from spacing between first two LEDs of first strand
-  const s0 = strandLEDs[0];
-  const spacing = s0.length > 1 ? s0[0].distanceTo(s0[1]) : 0.3;
-  const ledSize = spacing * 0.7;
+  // Size LEDs relative to the overall model bounds so they're visible at the
+  // sculpture viewing distance, regardless of the model's unit scale.
+  const box = new THREE.Box3();
+  for (const strand of strandLEDs) for (const p of strand) box.expandByPoint(p);
+  const ledSize = box.getSize(new THREE.Vector3()).length() / 300;
 
   const geo = new THREE.BoxGeometry(ledSize, ledSize, ledSize);
   // White base color; instance colors applied via setColorAt
@@ -148,7 +150,7 @@ function buildLEDMesh(strandLEDs) {
   const mesh = new THREE.InstancedMesh(geo, mat, totalLEDs);
 
   const dummy = new THREE.Object3D();
-  const black = new THREE.Color(0, 0, 0);
+  const black = LED_OFF_COLOR.clone();
   let idx = 0;
   for (const strand of strandLEDs) {
     for (const pos of strand) {
@@ -181,7 +183,11 @@ function applyLEDColors(strandLEDs, colorsFloat32) {
       const r = colorsFloat32[globalLED * 3];
       const g = colorsFloat32[globalLED * 3 + 1];
       const b = colorsFloat32[globalLED * 3 + 2];
-      color.setRGB(r, g, b);
+      if (r === 0 && g === 0 && b === 0) {
+        color.copy(LED_OFF_COLOR);
+      } else {
+        color.setRGB(r, g, b);
+      }
       ledMesh.setColorAt(globalOffset + li, color);
     }
     globalOffset += ledCount;
